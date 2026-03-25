@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nova Pro AI | v3.1 Elite</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap');
+        body { background-color: #020617; color: #f8fafc; font-family: 'Plus Jakarta Sans', sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        .glass { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); }
+        .chat-container { flex-grow: 1; overflow-y: auto; scroll-behavior: smooth; }
+        .user-msg { background: linear-gradient(135deg, #3b82f6, #8b5cf6); border: none; align-self: flex-end; }
+        .bot-msg { background: rgba(30, 41, 59, 0.7); align-self: flex-start; border: 1px solid rgba(255,255,255,0.05); }
+        pre { background: #0f172a; padding: 1rem; border-radius: 0.75rem; overflow-x: auto; border: 1px solid #334155; margin: 10px 0; width: 100%; }
+        code { color: #60a5fa; font-family: 'Courier New', monospace; }
+        .thinking { animation: pulse 1.5s infinite; color: #60a5fa; font-weight: 800; font-size: 10px; text-transform: uppercase; letter-spacing: 2px; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    </style>
+</head>
+<body>
+
+    <header class="p-6 glass border-b border-white/5 flex justify-between items-center z-10">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+                <i class="fas fa-bolt text-white"></i>
+            </div>
+            <div>
+                <h1 class="font-black text-lg tracking-tight">NOVA <span class="text-blue-500">PRO</span></h1>
+                <div class="flex items-center gap-2">
+                    <span id="status-dot" class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                    <span id="status-text" class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Core 3.1 Active</span>
+                </div>
+            </div>
+        </div>
+        <button onclick="location.reload()" class="p-2 hover:bg-white/5 rounded-lg transition text-slate-400">
+            <i class="fas fa-power-off"></i>
+        </button>
+    </header>
+
+    <div id="chat-window" class="chat-container p-6 flex flex-col gap-6">
+        <div class="bot-msg p-4 rounded-2xl rounded-tl-none max-w-[85%] text-sm shadow-sm flex gap-3">
+            <i class="fas fa-robot mt-1 text-blue-500"></i>
+            <div>Neural Link established. I am running on the **Gemini 3.1** engine. How can I assist?</div>
+        </div>
+    </div>
+
+    <div class="p-6 glass border-t border-white/5 bg-slate-900/40">
+        <div class="max-w-4xl mx-auto relative group flex gap-3">
+            <input autocomplete="off" id="user-input" type="text" 
+                placeholder="Query the system..." 
+                class="flex-grow bg-slate-950 border border-white/10 rounded-2xl py-4 px-6 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-sm shadow-2xl">
+            <button onclick="sendMessage()" class="bg-blue-600 hover:bg-blue-500 text-white px-6 rounded-2xl flex items-center justify-center transition-all active:scale-95 shadow-lg shadow-blue-600/20">
+                <i class="fas fa-paper-plane"></i>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // API CONFIG (Updated for 2026)
+        const API_KEY = "AIzaSyBR4xZ8kbVA8n08b5Gul79DtyjYLVVkdiY"; 
+        
+        // Priority order of models to try
+        const MODELS = ["gemini-3.1-flash-preview", "gemini-3-flash-preview", "gemini-2.5-flash"];
+        let currentModelIndex = 0;
+
+        let chatHistory = [];
+        const chatWindow = document.getElementById('chat-window');
+        const userInput = document.getElementById('user-input');
+
+        function appendMessage(role, text) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `${role === 'user' ? 'user-msg' : 'bot-msg'} p-4 rounded-2xl ${role === 'user' ? 'rounded-tr-none' : 'rounded-tl-none'} max-w-[85%] text-sm shadow-lg flex gap-3`;
+            
+            const htmlText = text
+                .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+                .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+                .replace(/\n/g, '<br>');
+
+            msgDiv.innerHTML = `
+                ${role !== 'user' ? '<i class="fas fa-robot mt-1 text-blue-500"></i>' : ''}
+                <div class="w-full overflow-hidden">${htmlText}</div>
+                ${role === 'user' ? '<i class="fas fa-user mt-1 text-white/50"></i>' : ''}
+            `;
+            chatWindow.appendChild(msgDiv);
+            chatWindow.scrollTo({ top: chatWindow.scrollHeight, behavior: 'smooth' });
+        }
+
+        async function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            appendMessage('user', text);
+            userInput.value = '';
+            chatHistory.push({ role: "user", parts: [{ text: text }] });
+
+            const loader = document.createElement('div');
+            loader.id = 'loader';
+            loader.className = 'thinking px-4';
+            loader.innerHTML = '<i class="fas fa-sync fa-spin mr-2"></i> Processing Neural Request...';
+            chatWindow.appendChild(loader);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+
+            await tryRequest();
+        }
+
+        async function tryRequest() {
+            const model = MODELS[currentModelIndex];
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`;
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ contents: chatHistory })
+                });
+
+                const data = await response.json();
+                
+                if (data.error) {
+                    // Fallback logic: If model not found, try the next one in the list
+                    if (data.error.message.includes("not found") && currentModelIndex < MODELS.length - 1) {
+                        currentModelIndex++;
+                        console.log(`Model failed. Retrying with ${MODELS[currentModelIndex]}`);
+                        return tryRequest(); 
+                    }
+                    throw new Error(data.error.message);
+                }
+
+                const aiResponse = data.candidates[0].content.parts[0].text;
+                document.getElementById('loader').remove();
+                appendMessage('bot', aiResponse);
+                chatHistory.push({ role: "model", parts: [{ text: aiResponse }] });
+
+            } catch (error) {
+                if (document.getElementById('loader')) document.getElementById('loader').remove();
+                appendMessage('bot', `❌ **CONNECTION INTERRUPTED:** ${error.message}`);
+                document.getElementById('status-dot').className = "w-2 h-2 bg-red-500 rounded-full";
+                document.getElementById('status-text').innerText = "System Offline";
+            }
+        }
+
+        userInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+    </script>
+</body>
+</html>
